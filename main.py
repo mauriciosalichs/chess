@@ -70,12 +70,18 @@ print_help = False          # Switch to show help menu
 # Initialize game variables
 
 def init_game_vars():
-    global black_pieces, white_pieces, white_future_moves, black_future_moves, possible_moves, white_moves, rewind_mode, movements, check_black_king, check_white_king, endgame_type, scrolling
+    global black_pieces, white_pieces, promoted_white_pawns, promoted_black_pawns, allow_white_castling_1, allow_white_castling_2, allow_black_castling_1, allow_black_castling_2, white_future_moves, black_future_moves, possible_moves, white_moves, rewind_mode, movements, check_black_king, check_white_king, endgame_type, scrolling
     
     white_moves = True      # Check who's turn is it
     movements = []          # Movements made stored in format: (selected piece,(x1,y1),(x2,y2),piece eaten if any,cwk,cbk)
     white_pieces = initial_white_pieces # Positions of white pieces
     black_pieces = initial_black_pieces # Positions of black pieces
+    promoted_white_pawns = set()
+    promoted_black_pawns = set()
+    allow_white_castling_1 = True
+    allow_white_castling_2 = True
+    allow_black_castling_1 = True
+    allow_black_castling_2 = True
     check_white_king = False            # Is white king in check?
     check_black_king = False            # Is black king in check?
     endgame_type = 0                    # 0: Not finished. 1: Black wins. 2: White wins. 3: Even.
@@ -87,7 +93,7 @@ def init_game_vars():
     scrolling = 0                       # To give an offset to left bar
 
 def getGameVars():
-    return [your_move,white_moves,movements,white_pieces,black_pieces,check_white_king,check_black_king,endgame_type,rewind_mode]
+    return [your_move,white_moves,movements,white_pieces,black_pieces,promoted_white_pawns,promoted_black_pawns,allow_white_castling_1, allow_white_castling_2,allow_black_castling_1,allow_black_castling_2,check_white_king,check_black_king,endgame_type,rewind_mode]
     
 # Drawing functions
 
@@ -199,6 +205,8 @@ def valid_moves(piece,x,y):
     opp_pieces = black_pieces if white_moves else white_pieces
     
     if piece < 9 and white_moves: # White pawns
+        if piece in promoted_white_pawns:
+            return valid_moves(12,x,y)
         if (x,y-1) not in all_pieces:
             ans.append((x,y-1))
         if y == 6 and (x,4) not in all_pieces:
@@ -209,6 +217,8 @@ def valid_moves(piece,x,y):
             ans.append((x+1,y-1))
             
     elif piece < 9: # Black pawns
+        if piece in promoted_black_pawns:
+            return valid_moves(12,x,y)
         if (x,y+1) not in all_pieces:
             ans.append((x,y+1))
         if y == 1 and (x,3) not in all_pieces:
@@ -251,7 +261,17 @@ def valid_moves(piece,x,y):
             for j in {y-1,y,y+1} & set(range(8)):
                 if (i,j) not in my_pieces and (i,j) != (x,y):
                     ans.append((i,j))
-    
+        # Castling feature
+        if white_moves:
+            if allow_white_castling_1 and (5,7) not in all_pieces and (6,7) not in all_pieces:
+                ans.append((6,7))
+            if allow_white_castling_2 and (1,7) not in all_pieces and (2,7) not in all_pieces and (3,7) not in all_pieces:
+                ans.append((2,7))
+        else:
+            if allow_black_castling_1 and (5,0) not in all_pieces and (6,0) not in all_pieces:
+                ans.append((6,0))
+            if allow_black_castling_2 and (1,0) not in all_pieces and (2,0) not in all_pieces and (3,0) not in all_pieces:
+                ans.append((2,0))
     return ans
 
 def calculate_all_moves(my_pieces,j=None,do_rem_mates=False):
@@ -284,7 +304,7 @@ def remove_mates(possible_moves,piece,my_pieces,opp_pieces):
 # Function to accept a well-executed movement
 
 def accept_movement(selected_piece,x1,y1,x2,y2):
-    global lx, ly, white_pieces, black_pieces, white_future_moves, black_future_moves, check_white_king, check_black_king, endgame_type, movements, white_moves, rewind_mode
+    global lx, ly, white_pieces, black_pieces, allow_white_castling_1, allow_white_castling_2, allow_black_castling_1, allow_black_castling_2, white_future_moves, black_future_moves, check_white_king, check_black_king, endgame_type, movements, white_moves, rewind_mode
 
     if white_moves:
         white_pieces[selected_piece] = (x2,y2)
@@ -298,6 +318,20 @@ def accept_movement(selected_piece,x1,y1,x2,y2):
         check_black_king = black_pieces[13] in white_future_moves
         if check_white_king:
             check_white_king = False
+        # Pawn promotion
+        if selected_piece < 9 and y2 == 0:
+            promoted_white_pawns.add(selected_piece)
+            white_imgs[selected_piece] = white_imgs[12]
+        # Castling disabeling
+        elif selected_piece == 13:
+            allow_white_castling_1 = False
+            allow_white_castling_2 = False
+            if x2 - x1 == 2: white_pieces[16] = (5,7)
+            elif x1 - x2 == 2: white_pieces[9] = (3,7)
+        elif selected_piece == 9:
+            allow_white_castling_2 = False
+        elif selected_piece == 16:
+            allow_white_castling_1 = False
     else:
         black_pieces[selected_piece] = (x2,y2)
         if (x2, y2) in white_pieces:
@@ -310,6 +344,20 @@ def accept_movement(selected_piece,x1,y1,x2,y2):
         check_white_king = white_pieces[13] in black_future_moves
         if check_black_king:
             check_black_king = False
+        # Pawn promotion
+        if selected_piece < 9 and y2 == 7:
+            promoted_black_pawns.add(selected_piece)
+            black_imgs[selected_piece] = black_imgs[12]
+        # Castling disabeling
+        elif selected_piece == 13:
+            allow_black_castling_1 = False
+            allow_black_castling_2 = False
+            if x2 - x1 == 2: black_pieces[16] = (5,0)
+            elif x1 - x2 == 2: black_pieces[9] = (3,0)
+        elif selected_piece == 9:
+            allow_black_castling_2 = False
+        elif selected_piece == 16:
+            allow_black_castling_1 = False
     if rewind_mode < 0:     # We erase the continuation of the game
         movements = movements[:rewind_mode]
         rewind_mode = 0
@@ -334,9 +382,9 @@ def accept_movement(selected_piece,x1,y1,x2,y2):
 # Load game and multiplayer functions
 
 def load_game(txt_raw):
-    global your_move,white_moves,movements,white_pieces,black_pieces,check_white_king,check_black_king,endgame_type,rewind_mode
+    global your_move,white_moves,movements,white_pieces,black_pieces,promoted_white_pawns,promoted_black_pawns,allow_white_castling_1, allow_white_castling_2,allow_black_castling_1,allow_black_castling_2,check_white_king,check_black_king,endgame_type,rewind_mode
     txt_vars = txt_raw.split(';')
-    [your_move,white_moves,movements,white_pieces,black_pieces,check_white_king,check_black_king,endgame_type,rewind_mode] = [eval(v) for v in txt_vars]
+    [your_move,white_moves,movements,white_pieces,black_pieces,promoted_white_pawns,promoted_black_pawns,allow_white_castling_1, allow_white_castling_2,allow_black_castling_1,allow_black_castling_2,check_white_king,check_black_king,endgame_type,rewind_mode] = [eval(v) for v in txt_vars]
 
 def enable_multiplayer_client(code):	# Only if its a client
     global client
