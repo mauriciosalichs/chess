@@ -21,6 +21,8 @@ you_white = "Juegas con blancas."
 you_black = "Juegas con negras."
 enabling_multiplayer = "Habilitando multijugador..."
 wrong_file = "Archivo no encontrado o corrupto."
+client_disconnected = 'El cliente se ha desconectado. Esperando a que ingrese de nuevo.'
+host_disconnected = 'El servidor se ha desconectado. Ingrese un nuevo codigo de juego: '
 
 help_text = ["Presione sobre cualquier","ficha para moverla.","","Los casilleros posibles","se marcarán en verde.","",\
              "No esta permitido ningún","movimiento suicida.",""," J y K -","Navegar entre los movimientos",\
@@ -35,7 +37,7 @@ black = (100,100,100)
 blue = (0, 0, 255)
 
 # Auxiliar function to pretty-print the movements
-def strMov(sel_piece,x1,y1,x2,y2,piece_eaten,cwk,cbk,i):
+def strMov(sel_piece,x2,y2,cwk,cbk,i):
     if i%2:
         txt_player = 'Negras'
         color = (255,0,0) if cwk else (255,255,255)
@@ -43,7 +45,7 @@ def strMov(sel_piece,x1,y1,x2,y2,piece_eaten,cwk,cbk,i):
         txt_player = 'Blancas'
         color = (255,0,0) if cbk else (255,255,255)
     txt_piece = ["","Peon 1","Peon 2","Peon 3","Peon 4","Peon 5","Peon 6","Peon 7","Peon 8","Torre 1","Caballo 1","Alfil 1","Reina","Rey","Alfil 2","Caballo 2","Torre 2"][sel_piece]
-    return (f"{txt_player} mueven {txt_piece} de ({x1+1},{y1+1}) a ({x2+1},{y2+1}).", color)
+    return (f"{txt_player} mueven {txt_piece} al casillero ({x2+1},{y2+1}).", color)
 
 # Auxiliar function to encode the game variables for the savefile
 def encodeVars(vars):

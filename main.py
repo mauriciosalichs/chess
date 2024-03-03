@@ -108,8 +108,8 @@ def draw_status_column():
         return
     # Show a line per each movement made
     for i in range(len(movements)):
-        (sel_piece,(x1,y1),(x2,y2),piece_eaten,cwk,cbk) = movements[i]
-        (move_text, color) = assets.strMov(sel_piece,x1,y1,x2,y2,piece_eaten,cwk,cbk,i)
+        (sel_piece,_,(x2,y2),piece_eaten,cwk,cbk) = movements[i]
+        (move_text, color) = assets.strMov(sel_piece,x2,y2,cwk,cbk,i)
         re_text = small_font.render(move_text, True, color)
         screen.blit(re_text, (855, 40+(20*(i+1))-scrolling))
     #Show cursor to move through the movements
@@ -174,12 +174,13 @@ def draw_guide():
             screen.blit(texto_render, (i*size+40,j*size+42))
 
 def redraw_all():
-    draw_board()
-    draw_pieces()
-    draw_status_column()
-    if print_guide:
-        draw_guide()
-    pygame.display.flip()
+    if allowed_to_play:
+        draw_board()
+        draw_pieces()
+        draw_status_column()
+        if print_guide:
+            draw_guide()
+        pygame.display.flip()
 
 # Piece-allowed-movements functions
 
@@ -423,18 +424,20 @@ def enable_multiplayer_server(you_black):	# Only if its a server
     return not you_black
     
 def async_waiting():
-    global allowed_to_play, your_move, wait_for_player, client, addr
+    global allowed_to_play, your_move, client, addr
     while True:
         opp_move = client.recv(1024).decode()
         if opp_move == '':
             allowed_to_play = False
+            screen.fill((128, 128, 128, 30))
+            pygame.display.flip()
             if you_serve:
-                print('El cliente se ha desconectado. Esperando a que ingrese de nuevo.')
+                print(assets.client_disconnected)
                 server.listen()
                 client, addr =  server.accept()
                 print(assets.someone_joined)
             else:
-                code = input('El servidor se ha desconectado. Ingrese un nuevo codigo de juego: ')
+                code = input(assets.host_disconnected)
                 enable_multiplayer_client(code)
             client.send(('load'+str(assets.encodeVars(getGameVars()))).encode())
             sleep(1)
@@ -447,7 +450,6 @@ def async_waiting():
 	        (detected_piece,(x1,y1),(x2,y2)) = eval(opp_move[4:]) # ERROR: NameError: name 'b' is not defined (client)
 	        accept_movement(detected_piece,x1,y1,x2,y2)
 	        your_move = True
-	        wait_for_player = False
         redraw_all()
 
 # First initialization
