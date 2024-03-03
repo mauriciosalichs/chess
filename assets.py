@@ -2,7 +2,7 @@ local = True
 
 port_number_host = 4321
 def addr_text(init_addr):
-   return '127.0.0.1' if local else init_addr+'.tcp.sa.ngrok.io'
+   return '127.0.0.1' if local else init_addr
 def port_number(port_text):
    return port_number_host if local else int(port_text)
 

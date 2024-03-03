@@ -3,25 +3,17 @@ import socket
 import threading
 import sys
 import assets
+from time import sleep
 
 # We check if we are playing online or not
 serv_addr = ''
 multi = False
-wait_for_player = False
+your_move = True
+allowed_to_play = True
+client = None
+server = None
 if len(sys.argv) == 2:
     multi = True
-    if sys.argv[1] == 'b' or sys.argv[1] == 'n':
-        print(assets.you_serve)
-        server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        you_serve = True
-    else:
-        code = sys.argv[1]
-        serv_addr = assets.addr_text(code[0])
-        serv_port = assets.port_number(code[1:])
-        print(assets.you_are_served(serv_addr,serv_port))
-        client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        you_serve = False
-    wait_for_player = False  
 
 # Initialize constant variables
 pygame.init()
@@ -76,23 +68,27 @@ print_guide = False         # Switch to print cell coordinates
 print_help = False          # Switch to show help menu
 
 # Initialize game variables
+
 def init_game_vars():
     global black_pieces, white_pieces, white_future_moves, black_future_moves, possible_moves, white_moves, rewind_mode, movements, check_black_king, check_white_king, endgame_type, scrolling
     
     white_moves = True      # Check who's turn is it
+    movements = []          # Movements made stored in format: (selected piece,(x1,y1),(x2,y2),piece eaten if any,cwk,cbk)
+    white_pieces = initial_white_pieces # Positions of white pieces
+    black_pieces = initial_black_pieces # Positions of black pieces
+    check_white_king = False            # Is white king in check?
+    check_black_king = False            # Is black king in check?
+    endgame_type = 0                    # 0: Not finished. 1: Black wins. 2: White wins. 3: Even.
+    rewind_mode = 0         # In case we undo or redo movements. Goes to negatives for each movement rewinded
+
     possible_moves = []     # List all possible current moves of a certain piece
     white_future_moves = [] # Stores the future possible moves of white pieces to prevent moving into check
     black_future_moves = [] # Stores the future possible moves of black pieces to prevent moving into check
-    rewind_mode = 0         # In case we undo or redo movements. Goes to negatives for each movement rewinded
-    movements = []          # Movements made stored in format: (selected piece,(x1,y1),(x2,y2),piece eaten if any,cwk,cbk)
-    black_pieces = initial_black_pieces # Positions of black pieces
-    white_pieces = initial_white_pieces # Positions of white pieces
-    check_black_king = False            # Is black king in check?
-    check_white_king = False            # Is white king in check?
-    endgame_type = 0                    # 0: Not finished. 1: Black wins. 2: White wins. 3: Even.
     scrolling = 0                       # To give an offset to left bar
 
-
+def getGameVars():
+    return [your_move,white_moves,movements,white_pieces,black_pieces,check_white_king,check_black_king,endgame_type,rewind_mode]
+    
 # Drawing functions
 
 def draw_status_column():
@@ -168,7 +164,7 @@ def draw_pieces():
 def draw_guide():
     for i in range(8):
         for j in range(8):
-            texto_render = fuente_chica.render(str((i+1,j+1)), True, (0,0,205))
+            texto_render = small_font.render(str((i+1,j+1)), True, (0,0,205))
             screen.blit(texto_render, (i*size+40,j*size+42))
 
 def redraw_all():
@@ -338,73 +334,94 @@ def accept_movement(selected_piece,x1,y1,x2,y2):
 # Load game and multiplayer functions
 
 def load_game(txt_raw):
-    global white_moves,movements,white_pieces,black_pieces,check_white_king,check_black_king,endgame_type,rewind_mode
+    global your_move,white_moves,movements,white_pieces,black_pieces,check_white_king,check_black_king,endgame_type,rewind_mode
     txt_vars = txt_raw.split(';')
-    [white_moves,movements,white_pieces,black_pieces,check_white_king,check_black_king,endgame_type,rewind_mode] = [eval(v) for v in txt_vars]
+    [your_move,white_moves,movements,white_pieces,black_pieces,check_white_king,check_black_king,endgame_type,rewind_mode] = [eval(v) for v in txt_vars]
 
-def enable_multiplayer_client():	# Only if its a client
-    if serv_addr == '':
-        print(assets.wrong_code)
-        return False
+def enable_multiplayer_client(code):	# Only if its a client
+    global client
+    [addr_txt,port_txt] = code.split(':')
+    serv_addr = assets.addr_text(addr_txt)
+    serv_port = assets.port_number(port_txt)
+    print(assets.you_are_served(serv_addr,serv_port))
+    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client.connect((serv_addr, serv_port))
     print(assets.we_joined)
-    opp_team = client.recv(1024).decode()
-    print(assets.you_white if opp_team == 'n' else assets.you_black)
-    return opp_team == 'n'
+    if first_conn:
+        opp_team = client.recv(1024).decode()
+        print(assets.you_white if opp_team == 'n' else assets.you_black)
+        return opp_team == 'n'
+    else:
+        pass
     
-def enable_multiplayer_server():	# Only if its a server
-    global client
-    print(assets.enabling_multiplayer)
-    server.bind(("localhost", assets.port_number_host))
+def enable_multiplayer_server(you_black):	# Only if its a server
+    global client, server
+    from pyngrok import ngrok
+    print(assets.you_serve)
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    
+    port = assets.port_number_host
+    ssh_tunnel = ngrok.connect(str(port), "tcp")
+    code = ssh_tunnel.public_url[6:]
+    
+    print(assets.enabling_multiplayer,code)
+    server.bind(("localhost", port))
     server.listen()
     client, addr =  server.accept()
     print(assets.someone_joined)
+    
     client.send(sys.argv[1].encode())
-    print(assets.you_black if sys.argv[1] == 'n' else assets.you_white)
-    return sys.argv[1] != 'n'
+    print(assets.you_black if you_black else assets.you_white)
+    return not you_black
     
 def async_waiting():
-    global your_move, wait_for_player
-    opp_move = client.recv(1024).decode()
-    while opp_move == '':
+    global allowed_to_play, your_move, wait_for_player, client, addr
+    while True:
         opp_move = client.recv(1024).decode()
-    print(opp_move)
-    if 'load' in opp_move:
-        load_game(opp_move[4:])
-        threading.Thread(target=async_waiting).start()
-    else:
-        (detected_piece,(x1,y1),(x2,y2)) = eval(opp_move)
-        accept_movement(detected_piece,x1,y1,x2,y2)
-        your_move = True
-        wait_for_player = False
-    redraw_all()
+        if opp_move == '':
+            allowed_to_play = False
+            if you_serve:
+                print('El cliente se ha desconectado. Esperando a que ingrese de nuevo.')
+                server.listen()
+                client, addr =  server.accept()
+                print(assets.someone_joined)
+            else:
+                code = input('El servidor se ha desconectado. Ingrese un nuevo codigo de juego: ')
+                enable_multiplayer_client(code)
+            client.send(('load'+str(assets.encodeVars(getGameVars()))).encode())
+            sleep(1)
+            client.send(('load'+str(assets.encodeVars(getGameVars()))).encode())
+            allowed_to_play = True
+        elif 'load' in opp_move:
+	        load_game(opp_move[4:])
+	        your_move = not your_move   # This variable is personal and we need to change the received one
+        elif 'play' in opp_move:
+	        (detected_piece,(x1,y1),(x2,y2)) = eval(opp_move[4:]) # ERROR: NameError: name 'b' is not defined (client)
+	        accept_movement(detected_piece,x1,y1,x2,y2)
+	        your_move = True
+	        wait_for_player = False
+        redraw_all()
 
 # First initialization
 
 init_game_vars()
-
-if multi and you_serve:
-    your_move = enable_multiplayer_server()
-elif multi and not you_serve:
-    your_move = enable_multiplayer_client()
-
+if multi:
+    first_conn = True
+    waiting_thread = threading.Thread(target=async_waiting)
+    if sys.argv[1] == 'b' or sys.argv[1] == 'n':
+        your_move = enable_multiplayer_server(sys.argv[1] == 'n')
+        you_serve = True
+    else:
+        your_move = enable_multiplayer_client(sys.argv[1])        
+        you_serve = False
+    first_conn = False
+    waiting_thread.start()
 redraw_all()
 
 # Main loop
 
 running = True
 while running:
-
-    if wait_for_player:
-        for event in pygame.event.get():
-            if event.type == pygame.KEYDOWN and event.key == pygame.K_q:
-                running = False
-        continue
-    if multi and not your_move:
-        threading.Thread(target=async_waiting).start()
-        wait_for_player = True
-        _=pygame.event.get()
-        continue
 
     if action_started:
         redraw_all()
@@ -415,7 +432,7 @@ while running:
         elif event.type == pygame.MOUSEMOTION:
             x, y = event.pos
             
-        elif (endgame_type == 0 or rewind_mode != 0) and event.type == pygame.MOUSEBUTTONDOWN:
+        elif allowed_to_play and your_move and (endgame_type == 0 or rewind_mode != 0) and event.type == pygame.MOUSEBUTTONDOWN:
             action_started = True
             x1, y1 = event.pos
             x1 = int(x1/size)
@@ -441,7 +458,7 @@ while running:
             y2 = int(y2/size)
             if selected_piece and (x2,y2) in possible_moves:
                 if multi:
-                    str_move = str((selected_piece,(x1,y1),(x2,y2)))
+                    str_move = 'play'+str((selected_piece,(x1,y1),(x2,y2)))
                     client.send(str_move.encode())
                     your_move = False
                 accept_movement(selected_piece,x1,y1,x2,y2)
@@ -456,10 +473,10 @@ while running:
         elif event.type == pygame.KEYDOWN and not action_started:
             if event.key == pygame.K_q:
                 running = False
-            if event.key == pygame.K_r:
+            if not multi and event.key == pygame.K_r:
                 init_game_vars()
             
-            elif event.key == pygame.K_j and abs(rewind_mode) < len(movements) and not multi:
+            elif not multi and event.key == pygame.K_j and abs(rewind_mode) < len(movements):
                 rewind_mode -= 1
                 sel_piece,(x1r,y1r),(x2r,y2r),piece_eaten,_,_ = movements[rewind_mode]
                 if abs(rewind_mode) < len(movements) - 1:
@@ -495,8 +512,7 @@ while running:
                 if multi and not your_move:  # For now, saving the game in multiplayer mode its only allowed during your turn
                     continue
                 with open('savefile', 'w') as f:
-                    vars = [white_moves,movements,white_pieces,black_pieces,check_white_king,check_black_king,endgame_type,rewind_mode]
-                    f.write(assets.encodeVars(vars))
+                    f.write(assets.encodeVars(getGameVars()))
             elif event.key == pygame.K_l:
                 try:
                     with open('savefile', 'r') as f:
@@ -511,5 +527,8 @@ while running:
         
     #pygame.display.flip()   # Actualizacion
     
-# Quit Pygame
+# Quit game
+if(server):
+    server.shutdown(socket.SHUT_RDWR)
+    server.close()
 pygame.quit()
